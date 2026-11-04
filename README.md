@@ -1,21 +1,17 @@
-# TidalMoE
+<h1 align="center">TidalMoE</h1>
 
-**Hot/cold expert tiering and host-aware MoE kernels for DeepSeek-V4.1-Flash on a single NVIDIA GB300.**
+<p align="center"><a href="report/tidalmoe.pdf">Technical Report</a></p>
 
 TidalMoE serves `deepseek-ai/DeepSeek-V4.1-Flash-1017` (552B backbone + 196B Engram parameters, 1M context) on one
-GB300 Grace Blackwell Ultra desktop superchip. On the same hardware, image and model it is **2.4–4.3× faster than
-stock vLLM**.
+NVIDIA GB300 desktop superchip, **2.4–4.3× faster than stock vLLM** on the same hardware, image and model.
 
-It is a [vLLM general plugin](plugin/moe_placement) plus a launch script on top of the unmodified official
-`vllm/vllm-openai` v0.33.0 image. There are no vLLM source changes and no rebuild.
-
-📄 **Technical report:** [report/tidalmoe.pdf](report/tidalmoe.pdf) covers the design, measurements, figures and
-references.
+It is a [vLLM general plugin](plugin/moe_placement) plus a launch script for the unmodified official
+`vllm/vllm-openai` v0.33.0 image. No vLLM source changes, no rebuild.
 
 ## Results
 
 Output tokens/s from [vllm-bench](https://github.com/vllm-project/vllm-bench): ShareGPT prompts, 1024 output tokens,
-temperature 0, warm server. Every step was A/B-tested against the previous one, with interleaved runs.
+temperature 0, warm server. Each step was A/B-tested against the previous one with interleaved runs.
 
 | Configuration | conc 1 | conc 8 | conc 32 | Chinese conc 32 |
 |---|---:|---:|---:|---:|
@@ -27,25 +23,23 @@ Prefill logprobs are bit-identical to the unmodified model, and the 1M-token con
 
 ## How it works
 
-The routed experts (~253 GiB in MXFP4) do not fit in HBM. Stock vLLM offloads whole MoE layers and becomes bound by
-host-memory reads. TidalMoE does the following instead:
+The routed experts (~253 GiB in MXFP4) do not fit in HBM. Stock vLLM offloads whole MoE layers and is bound by
+host-memory reads. TidalMoE instead uses:
 
 1. **Per-expert hot/cold placement.** Each expert weight tensor is one CUDA virtual-address range whose pages live in
    HBM (hot experts) or pinned Grace LPDDR5X (cold experts). Experts are permuted together with their routing biases,
    so routing is unchanged.
-2. **Adaptive expert cache.** Hot and cold experts are swapped online, based on statistically gated usage counts.
+2. **Adaptive expert cache.** Hot and cold experts are swapped online, gated by a significance test on usage counts.
    Swaps happen in place, so CUDA graphs stay valid.
-3. **Kernel-aware layout.** Cold experts sit in evenly spread groups of 8, and each layer gets its own host-memory
-   budget from a convex cost model.
-4. **Bit-exact forced MoE tactics.** Deeper TRT-LLM pipelines are used for the calls that still go through TRT-LLM.
-5. **HBM reclaimed for experts.** GPU KV is sized to exactly 1M tokens, with a 32 GiB CPU KV tier behind it, and the
+3. **Kernel-aware layout.** Cold experts sit in evenly spread groups of 8; per-layer host budgets come from a convex
+   cost model.
+4. **Bit-exact forced MoE tactics.** Deeper TRT-LLM pipelines for the calls that still use TRT-LLM.
+5. **HBM reclaimed for experts.** GPU KV is sized to exactly 1M tokens with a 32 GiB CPU KV tier behind it, and the
    token embedding moves to host memory.
-6. **Host-aware persistent MoE kernels.** Inside one launch, a few CTAs stream the host-resident experts over
-   NVLink-C2C while the rest stream HBM. This reaches ~378 GB/s from host memory concurrently with ~6 TB/s from HBM.
-7. **DSpark adaptive verification with a cost model measured on GB300.** vLLM's built-in cost profile leaves out the
-   MoE layers.
-
-The report covers each of these in detail, along with the alternatives that were measured and rejected.
+6. **Host-aware persistent MoE kernels.** In one launch, a few CTAs stream host-resident experts over NVLink-C2C
+   (~378 GB/s) while the rest stream HBM (~6 TB/s).
+7. **Calibrated DSpark adaptive verification.** A cost model measured on GB300 replaces vLLM's built-in profile, which
+   leaves out the MoE layers.
 
 ## Requirements
 
@@ -55,7 +49,7 @@ The report covers each of these in detail, along with the alternatives that were
 - **Containers:** Docker with the NVIDIA Container Toolkit.
 - **Image:** `vllm/vllm-openai@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e` (vLLM 0.33.0).
 - **Model:** `deepseek-ai/DeepSeek-V4.1-Flash-1017` in the Hugging Face cache (~476 GB).
-- **Pinned host memory:** about 277 GiB. Keep NUMA node 0's `MemAvailable` above ~40 GiB.
+- **Pinned host memory:** ~277 GiB. Keep NUMA node 0's `MemAvailable` above ~40 GiB.
 
 ## Quick start
 
@@ -70,9 +64,9 @@ curl -s localhost:8000/v1/chat/completions -H 'Content-Type: application/json' \
   -d '{"model":"deepseek-ai/DeepSeek-V4.1-Flash-1017","messages":[{"role":"user","content":"Hello!"}]}'
 ```
 
-- `DRY_RUN=1 ./serve.sh` prints the `docker run` command instead of starting the container.
-- Extra arguments to `serve.sh` are passed to `vllm serve`.
-- Keep `CACHE_DIR` (default `~/.cache/tidal-moe`) across starts. It holds the JIT and FlashInfer autotune caches.
+- `DRY_RUN=1 ./serve.sh` prints the `docker run` command without starting the container.
+- Extra arguments to `serve.sh` go to `vllm serve`.
+- Keep `CACHE_DIR` (default `~/.cache/tidal-moe`) across starts; it holds the JIT and FlashInfer autotune caches.
 
 ### Main switches
 
@@ -89,7 +83,7 @@ curl -s localhost:8000/v1/chat/completions -H 'Content-Type: application/json' \
 | `MOE_HOST_PARAMS` | `embed_tokens\.weight$` | parameters moved to host memory; empty = none |
 | `KV_BYTES`, `CPU_KV_BYTES` | 1M-token KV, 32 GiB | GPU KV size; CPU KV tier (0 = off) |
 
-`serve.sh` documents every knob. `serve-stock.sh` is the exact stock baseline.
+`serve.sh` documents every knob; `serve-stock.sh` is the exact stock baseline.
 
 ## Benchmarking and correctness
 
@@ -102,20 +96,20 @@ bench/measure-bw.sh tidal tidal-moe 8 32                    # HBM + LPDDR5X/C2C 
 correctness/check.sh mycheck tidal-moe                      # prefill bit-exactness, decode, long prompt, memory
 ```
 
-Run-to-run noise is about ±2.5% at conc 8/32. Alternate configurations (A B B A) before trusting a difference.
-`correctness/check.sh` expects an otherwise idle server: batching with other traffic changes numerics.
-To rebuild the placement plan from your own traffic, see [docs/REPLANNING.md](docs/REPLANNING.md).
+- Run-to-run noise is ~±2.5% at conc 8/32. Interleave configurations (A B B A) before trusting a difference.
+- `correctness/check.sh` needs an otherwise idle server: batching with other traffic changes numerics.
+- To rebuild the placement plan from your own traffic, see [docs/REPLANNING.md](docs/REPLANNING.md).
 
 ## Caveats
 
-- **Tied to this image.** The forced tactics, the generated persistent kernels and the adaptive-verification cost
-  curve are specific to vLLM 0.33.0 / FlashInfer 0.7.2.post1. After an upgrade, start with
-  `MOE_TACTICS= MOE_PERSIST=0 MOE_AV=0` and re-validate.
-- **Decode output changes slightly.** The persistent kernels make decode deterministic but not bit-identical to
-  TRT-LLM, so greedy outputs change at near-ties. Measured quality is the same.
-- **Page cache can steal GPU memory.** The HBM shows up as NUMA node 1. Bind host processes to node 0
+- **Tied to this image.** The forced tactics, generated persistent kernels and adaptive-verification cost curve are
+  specific to vLLM 0.33.0 / FlashInfer 0.7.2.post1. After an upgrade, start with `MOE_TACTICS= MOE_PERSIST=0 MOE_AV=0`
+  and re-validate.
+- **Decode output changes slightly.** The persistent kernels are deterministic but not bit-identical to TRT-LLM, so
+  greedy outputs change at near-ties. Measured quality is unchanged.
+- **Page cache can take GPU memory.** HBM appears as NUMA node 1. Bind host processes to node 0
   (`numactl --membind=0`), or page cache may spill into GPU memory.
-- **One checkpoint only.** Only the MXFP4 checkpoint was evaluated.
+- **One checkpoint.** Only the MXFP4 checkpoint was evaluated.
 
 ## Repository layout
 
@@ -131,5 +125,6 @@ docs/                      raw engineering notes: architecture measurements, Nsi
 
 ## License
 
-Apache-2.0 ([LICENSE](LICENSE)). `plugin/moe_placement/persist_moe_cute.py` derives from vLLM (Apache-2.0) and FlashInfer
-(BSD-3-Clause); see [NOTICE](NOTICE). Model weights and datasets are not included and have their own licenses.
+Apache-2.0 ([LICENSE](LICENSE)). `plugin/moe_placement/persist_moe_cute.py` derives from vLLM (Apache-2.0) and
+FlashInfer (BSD-3-Clause); see [NOTICE](NOTICE). Model weights and datasets are not included and have their own
+licenses.
