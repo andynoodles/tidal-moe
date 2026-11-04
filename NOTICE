@@ -1,0 +1,17 @@
+TidalMoE
+Copyright 2026 the TidalMoE authors. Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes software derived from the following projects:
+
+* vLLM (https://github.com/vllm-project/vllm), Apache License 2.0, Copyright contributors to the vLLM project.
+  plugin/moe_placement/persist_moe_cute.py is generated (tools/persist/make_persist_cute.py) from vLLM's
+  models/deepseek_v41/nvidia/specialized_decode/moe/routed_expert_gemm_cute.py in the vllm/vllm-openai v0.33.0 image.
+  The plugin also wraps internal vLLM classes at runtime.
+
+* FlashInfer (https://github.com/flashinfer-ai/flashinfer), BSD 3-Clause License,
+  Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. The vLLM routed-expert GEMM above is itself modified from
+  FlashInfer's LowLatencyBlockscaledGemmKernel (flashinfer/gemm/kernels/cute_dsl/low_latency_blockscaled_gemm.py);
+  the original BSD-3-Clause notice is retained in plugin/moe_placement/persist_moe_cute.py.
+
+Model weights (deepseek-ai/DeepSeek-V4.1-Flash-1017) and benchmark datasets (ShareGPT, ShareGPT-CN) are not included
+and are subject to their own licenses.
