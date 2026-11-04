@@ -184,16 +184,16 @@ def fig_persist():
     data = {6: ([0.120, 0.279, 0.617, 1.113], [0.114, 0.201, 0.472, 0.837]),
             32: ([0.343, 0.396, 0.648, 1.129], [0.355, 0.358, 0.477, 0.844]),
             64: ([0.557, 0.545, 0.778, 1.149], [0.551, 0.528, 0.542, 0.843])}
-    fig, axs = plt.subplots(1, 3, figsize=(6.6, 2.2), sharey=True)
+    fig, axs = plt.subplots(1, 3, figsize=(6.6, 2.3), sharey=True, gridspec_kw={"wspace": 0.18})
     for ax, (T, (trt, per)) in zip(axs, data.items()):
         ax.plot(cold, trt, color=ORANGE, marker="D", label="TRT-LLM + forced tactics")
         ax.plot(cold, per, color=BLUE, marker="o", label="TidalMoE persistent")
         ax.set_title(f"{T} tokens per call", color=INK)
-        ax.set_xticks(cold)
+        ax.set_xticks(cold); ax.set_xlim(-1.5, 20)
         gain = 1 - per[-1] / trt[-1]
         ax.annotate(f"-{gain:.0%}", (cold[-1], per[-1]), xytext=(0, -9), textcoords="offset points",
                     ha="center", va="top", fontsize=7, color=INK2)
-    fig.supxlabel("host-resident (cold) experts touched in the layer", fontsize=8.5, y=-0.04)
+    fig.supxlabel("host-resident (cold) experts touched in the layer", fontsize=8.5, y=-0.07)
     axs[0].set_ylabel("MoE layer time (ms)"); axs[0].set_ylim(0, 1.25)
     axs[0].legend(loc="upper left", fontsize=7)
     save(fig, "fig_persist.pdf")
