@@ -1,0 +1,4 @@
+Metadata-Version: 2.1
+Name: tidal_qwen
+Version: 0.1
+Summary: TidalMoE hot/cold expert placement + adaptive cache for Qwen3.5-MoE (vLLM general plugin)

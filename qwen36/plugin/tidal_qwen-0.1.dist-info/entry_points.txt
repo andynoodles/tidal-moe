@@ -1,0 +1,2 @@
+[vllm.general_plugins]
+tidal_qwen = tidal_qwen:register

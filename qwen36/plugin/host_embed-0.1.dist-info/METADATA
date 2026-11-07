@@ -1,0 +1,4 @@
+Metadata-Version: 2.1
+Name: host_embed
+Version: 0.1
+Summary: vLLM general plugin: token embedding in pinned host memory (UVA)
