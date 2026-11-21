@@ -54,7 +54,7 @@ host-memory reads. TidalMoE instead uses:
 ## Quick start
 
 ```bash
-git clone https://github.com/ardge-dev/tidal-moe && cd tidal-moe
+git clone https://github.com/andynoodles/tidal-moe && cd tidal-moe
 export HF_HOME=/data0/huggingface            # where the HF cache lives (model read from $HF_HOME/hub)
 hf download deepseek-ai/DeepSeek-V4.1-Flash-1017
 
